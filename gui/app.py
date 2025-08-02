@@ -41,7 +41,7 @@ with col1:
 left_col, right_col = st.columns([1.2, 2])
 
 with left_col:
-
+    st.title("")
 
     square_size = 700
     image = np.zeros((square_size, square_size, 3), dtype=np.uint8)
@@ -52,18 +52,15 @@ with left_col:
     overlay = cv2.imread(overlay_path, cv2.IMREAD_UNCHANGED)
     
     if overlay is not None:
-        # Resize overlay if larger than square
         max_overlay_size = int(square_size * 0.5)
         h, w = overlay.shape[:2]
         scale = min(max_overlay_size / h, max_overlay_size / w, 1.0)
         new_size = (int(w * scale), int(h * scale))
         overlay_resized = cv2.resize(overlay, new_size, interpolation=cv2.INTER_AREA)
 
-        # Calculate position to center overlay
         y_offset = (square_size - overlay_resized.shape[0]) // 2
         x_offset = (square_size - overlay_resized.shape[1]) // 2
 
-        # Overlay with alpha channel
         if overlay_resized.shape[2] == 4:
             alpha = overlay_resized[:, :, 3] / 255.0
             for c in range(3):
@@ -96,15 +93,78 @@ with left_col:
 
 #########################################################################
     
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([0.5, 1])
     with col1:
-        st.markdown(
-            f"""
-            <button style="border:none;background:none;padding:0;">
-            <img src="assets/Group 17.png" width="100" style="width:100%;max-width:100px;" />
-            </button>
-            """,
-            unsafe_allow_html=True
-        )
+        col1a,col1b = st.columns([1, 1])
+        square_size = 100
+        with col1a:
+            # Função para centralizar e sobrepor imagem sobre quadrado
+            def overlay_centered(square_size, img_path):
+                # Cria quadrado de fundo
+                bg = np.zeros((square_size, square_size, 3), dtype=np.uint8)
+                bg[:, :] = [255,255, 255]
 
+                # Carrega imagem com canal alpha se existir
+                img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+                if img is None:
+                    return bg
 
+                # Redimensiona imagem para caber no quadrado
+                h, w = img.shape[:2]
+                scale = min(square_size / h, square_size / w, 1.0)
+                new_size = (int(w * scale), int(h * scale))
+                img_resized = cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
+
+                # Centraliza
+                y_offset = (square_size - img_resized.shape[0]) // 2
+                x_offset = (square_size - img_resized.shape[1]) // 2
+
+                # Sobrepõe considerando alpha
+                if img_resized.shape[2] == 4:
+                    alpha = img_resized[:, :, 3] / 255.0
+                    for c in range(3):
+                        bg[y_offset:y_offset+img_resized.shape[0], x_offset:x_offset+img_resized.shape[1], c] = (
+                            alpha * img_resized[:, :, c] +
+                            (1 - alpha) * bg[y_offset:y_offset+img_resized.shape[0], x_offset:x_offset+img_resized.shape[1], c]
+                        ).astype(np.uint8)
+                else:
+                    bg[y_offset:y_offset+img_resized.shape[0], x_offset:x_offset+img_resized.shape[1], :] = img_resized[:, :, :3]
+                bg = cv2.cvtColor(bg, cv2.COLOR_BGR2RGB)
+                return bg
+
+            st.image(overlay_centered(square_size, "assets/Group 17.png"), use_container_width=False) 
+            st.image(overlay_centered(square_size, "assets/Group 22.png"), use_container_width=False)
+        
+        with col1b:
+            st.markdown(
+                """
+                <style>
+                .square-btn {
+                    width: 100px !important;
+                    height: 100px !important;
+                    font-size: 16px;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    margin-bottom: 10px;
+                }
+                </style>
+                <button class="square-btn" onclick="window.dispatchEvent(new Event('multithread '));">Multithread/Simples</button>
+                <button class="square-btn" onclick="window.dispatchEvent(new Event('group_22'));">Carregar Script Externo 22</button>
+                """,
+                unsafe_allow_html=True
+            )
+    with col2:
+        width, height = 400, 200
+        image = np.zeros((height, width, 3), dtype=np.uint8)
+        image[:, :] = [255, 255, 255]
+        st.image(image, caption="")
+
+    with right_col:
+        st.title("Visualizador de resultados")
+        square_size = 700
+        image = np.zeros((square_size,square_size, 3), dtype=np.uint8)
+        image[:, :] = [255, 165, 0]
+        st.image(image, caption="")
+
+        right_col1, right_col2 = st.columns([1, 1])
