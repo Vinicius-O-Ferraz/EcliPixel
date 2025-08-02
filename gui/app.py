@@ -33,7 +33,7 @@ st.set_page_config(layout="wide",
 # ================= Header =================
 col1, col2 = st.columns([1, 9])
 with col1:
-    st.image("assets/logo.png", width=100) 
+    st.image("assets/logo.png", width=200) 
     # st.markdown("### EcliPixel ")
 
 
@@ -167,4 +167,18 @@ with left_col:
         image[:, :] = [255, 165, 0]
         st.image(image, caption="")
 
-        right_col1, right_col2 = st.columns([1, 1])
+
+    with right_col:
+        right_col1, right_col2 = st.columns([1, 10])
+        with right_col1:
+            width, height = 100, 100
+            image = np.ones((height, width, 3), dtype=np.uint8) * 255
+            st.image(image, caption="", use_container_width=False)
+
+            width, height = 100, 100
+            image = np.ones((height, width, 3), dtype=np.uint8) * 255
+            st.image(image, caption="", use_container_width=False)
+        with right_col2:
+            width, height = 550, 200
+            image = np.zeros((height, width, 3), dtype=np.uint8)
+            st.image(image, caption="", use_container_width=False)
