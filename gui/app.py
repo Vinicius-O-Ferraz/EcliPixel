@@ -149,6 +149,7 @@ with left_col:
             with col_um:
 
                 st.title("Binarização da imagem")
+                ###A partir daqui, substituir por implementação em java
                 def binarize_image(uploaded_file):
                     # Read image from uploaded file
                     image = Image.open(uploaded_file).convert("L")  # Convert to grayscale
