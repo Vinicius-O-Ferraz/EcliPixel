@@ -2,6 +2,8 @@ import os
 import streamlit as st
 import numpy as np
 import cv2
+import io
+from PIL import Image
 
 
 st.markdown(
@@ -72,54 +74,30 @@ with left_col:
             image[y_offset:y_offset+overlay_resized.shape[0], x_offset:x_offset+overlay_resized.shape[1], :] = overlay_resized[:, :, :3]
 
     st.image(image, caption="")
-
-    # Para customizar a largura do botão, use st.markdown com HTML/CSS:
-    st.markdown(
-        """
-        <style>
-        .custom-btn {
-            width: 700px; /* Altere para a largura desejada, ex: 300px */
-            height: 50px;
-            font-size: 18px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        </style>
-        <button class="custom-btn">Add Image</button>
-        """,
-        unsafe_allow_html=True
-    )
-
-#########################################################################
     
     col1, col2 = st.columns([0.5, 1])
     with col1:
         col1a,col1b = st.columns([1, 1])
         square_size = 100
+        
         with col1a:
-            # Função para centralizar e sobrepor imagem sobre quadrado
+            
             def overlay_centered(square_size, img_path):
-                # Cria quadrado de fundo
                 bg = np.zeros((square_size, square_size, 3), dtype=np.uint8)
                 bg[:, :] = [255,255, 255]
 
-                # Carrega imagem com canal alpha se existir
                 img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
                 if img is None:
                     return bg
 
-                # Redimensiona imagem para caber no quadrado
                 h, w = img.shape[:2]
                 scale = min(square_size / h, square_size / w, 1.0)
                 new_size = (int(w * scale), int(h * scale))
                 img_resized = cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
 
-                # Centraliza
                 y_offset = (square_size - img_resized.shape[0]) // 2
                 x_offset = (square_size - img_resized.shape[1]) // 2
 
-                # Sobrepõe considerando alpha
                 if img_resized.shape[2] == 4:
                     alpha = img_resized[:, :, 3] / 255.0
                     for c in range(3):
@@ -134,7 +112,7 @@ with left_col:
 
             st.image(overlay_centered(square_size, "assets/Group 17.png"), use_container_width=False) 
             st.image(overlay_centered(square_size, "assets/Group 22.png"), use_container_width=False)
-        
+
         with col1b:
             st.markdown(
                 """
@@ -154,6 +132,7 @@ with left_col:
                 """,
                 unsafe_allow_html=True
             )
+
     with col2:
         width, height = 400, 200
         image = np.zeros((height, width, 3), dtype=np.uint8)
@@ -162,55 +141,63 @@ with left_col:
 
     with right_col:
         st.title("Visualizador de resultados")
-        square_size = 700
-        image = np.zeros((square_size,square_size, 3), dtype=np.uint8)
-        image[:, :] = [255, 165, 0]
-        st.image(image, caption="")
 
+        uploaded_file = st.file_uploader("Escolha uma imagem",type=["png", "jpeg", "jpg"],label_visibility="collapsed",key="file_uploader")
 
-    with right_col:
-        right_col1, right_col2 = st.columns([1, 10])
-        with right_col1:
-            oip_img = cv2.imread("assets/OIP.png", cv2.IMREAD_UNCHANGED)
-            if oip_img is not None:
-                oip_img_resized = cv2.resize(oip_img, (100, 100), interpolation=cv2.INTER_AREA)
-                st.image(oip_img_resized, caption="", use_container_width=False)
-            else:
-                st.write("Imagem não encontrada.")
+        if uploaded_file is not None:
+            col_um, col_dois = st.columns([1, 1])
+            with col_um:
 
+                st.title("Binarização da imagem")
+                def binarize_image(uploaded_file):
+                    # Read image from uploaded file
+                    image = Image.open(uploaded_file).convert("L")  # Convert to grayscale
+                    arr = np.array(image)
+                    # Simple thresholding
+                    _, binary = cv2.threshold(arr, 127, 255, cv2.THRESH_BINARY)
+                    # Convert back to PIL Image
+                    bin_img = Image.fromarray(binary)
+                    return bin_img
+                
+                bin_img = binarize_image(uploaded_file)
+                # Show binarized image
+                st.image(bin_img, caption="Imagem Binarizada")
 
-            histograma_img = cv2.imread("assets/histograma.png", cv2.IMREAD_UNCHANGED)
-            if histograma_img is not None:
-                histograma_img = cv2.resize(histograma_img, (100, 100), interpolation=cv2.INTER_AREA)
-                st.image(histograma_img, caption="", use_container_width=False)
-            else:
-                st.write("Imagem não encontrada.")
-            
-          
-        with right_col2:
-            right_col2a, right_col2b = st.columns([1, 9])
-            with right_col2a:  
-                st.markdown(
-                    """
-                    <style>
-                    .vertical-btn {
-                        width: 100px !important;
-                        height: 100px !important;
-                        font-size: 16px;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        margin-bottom: 10px;
-                        display: block;
-                    }
-                    </style>
-                    <button class="vertical-btn">Binarizar</button>
-                    <button class="vertical-btn">Histograma</button>
-                    """,
-                    unsafe_allow_html=True
+                # Prepare image for download
+                buf = io.BytesIO()
+                bin_img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.download_button(
+                    label="Baixar imagem binarizada",
+                    data=byte_im,
+                    file_name="binarizada.png",
+                    mime="image/png"
                 )
-            with right_col2b:
+            with col_dois:
+                st.title("Histograma da imagem")
+                def plot_histogram(image_pil):
+                    arr = np.array(image_pil)
+                    hist = cv2.calcHist([arr], [0], None, [256], [0,256])
+                    hist_img = np.full((200, 256, 3), 255, dtype=np.uint8)
+                    cv2.normalize(hist, hist, 0, 200, cv2.NORM_MINMAX)
+                    for x, y in enumerate(hist):
+                        cv2.line(hist_img, (x, 200), (x, 200-int(y)), (0,0,0), 1)
+                    hist_img = cv2.cvtColor(hist_img, cv2.COLOR_BGR2RGB)
+                    return Image.fromarray(hist_img)
 
-                width, height = 400, 200
-                image = np.zeros((height, width, 3), dtype=np.uint8)
-                st.image(image, caption="", use_container_width=False)
+                hist_img = plot_histogram(Image.open(uploaded_file))
+                st.image(hist_img, caption="Histograma da Imagem Binarizada")
+
+                buf_hist = io.BytesIO()
+                hist_img.save(buf_hist, format="PNG")
+                byte_hist = buf_hist.getvalue()
+                st.download_button(
+                    label="Baixar histograma",
+                    data=byte_hist,
+                    file_name="histograma.png",
+                    mime="image/png"
+                )
+
+
+       
+
