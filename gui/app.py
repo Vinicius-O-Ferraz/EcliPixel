@@ -171,14 +171,46 @@ with left_col:
     with right_col:
         right_col1, right_col2 = st.columns([1, 10])
         with right_col1:
-            width, height = 100, 100
-            image = np.ones((height, width, 3), dtype=np.uint8) * 255
-            st.image(image, caption="", use_container_width=False)
+            oip_img = cv2.imread("assets/OIP.png", cv2.IMREAD_UNCHANGED)
+            if oip_img is not None:
+                oip_img_resized = cv2.resize(oip_img, (100, 100), interpolation=cv2.INTER_AREA)
+                st.image(oip_img_resized, caption="", use_container_width=False)
+            else:
+                st.write("Imagem não encontrada.")
 
-            width, height = 100, 100
-            image = np.ones((height, width, 3), dtype=np.uint8) * 255
-            st.image(image, caption="", use_container_width=False)
+
+            histograma_img = cv2.imread("assets/histograma.png", cv2.IMREAD_UNCHANGED)
+            if histograma_img is not None:
+                histograma_img = cv2.resize(histograma_img, (100, 100), interpolation=cv2.INTER_AREA)
+                st.image(histograma_img, caption="", use_container_width=False)
+            else:
+                st.write("Imagem não encontrada.")
+            
+          
         with right_col2:
-            width, height = 550, 200
-            image = np.zeros((height, width, 3), dtype=np.uint8)
-            st.image(image, caption="", use_container_width=False)
+            right_col2a, right_col2b = st.columns([1, 9])
+            with right_col2a:  
+                st.markdown(
+                    """
+                    <style>
+                    .vertical-btn {
+                        width: 100px !important;
+                        height: 100px !important;
+                        font-size: 16px;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        margin-bottom: 10px;
+                        display: block;
+                    }
+                    </style>
+                    <button class="vertical-btn">Binarizar</button>
+                    <button class="vertical-btn">Histograma</button>
+                    """,
+                    unsafe_allow_html=True
+                )
+            with right_col2b:
+
+                width, height = 400, 200
+                image = np.zeros((height, width, 3), dtype=np.uint8)
+                st.image(image, caption="", use_container_width=False)
