@@ -2,9 +2,8 @@
 
 <p text-align:"center">
   <img width="390" height="380" alt="logo" src="https://github.com/user-attachments/assets/a64c47e7-d788-4a44-ade1-2c4d7ea22096"/>
-
-
 </p>
+
 ## Como executar o programa
 
 1 - Clone o repositório
