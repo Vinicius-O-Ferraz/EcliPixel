@@ -1,11 +1,11 @@
 import enums.CanalCor;
 import enums.Thresh;
 import exceptions.FalhaAoCarregarImagem;
-import lombok.Data;
-import static enums.Thresh.GLOBAL;
-import static enums.Thresh.LOCAL_MEDIA;
+import org.bytedeco.javacpp.FloatPointer;
+import org.bytedeco.javacpp.IntPointer;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.MatVector;
+import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.Size;
 
 import java.io.IOException;
@@ -13,154 +13,138 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import static enums.Thresh.GLOBAL;
+import static enums.Thresh.LOCAL_MEDIA;
 import static org.bytedeco.opencv.global.opencv_core.split;
-import static org.bytedeco.opencv.global.opencv_imgproc.*;
 import static org.bytedeco.opencv.global.opencv_imgcodecs.*;
+import static org.bytedeco.opencv.global.opencv_imgproc.*;
 
+/**
+ * Classe de serviço stateless com métodos utilitários estáticos
+ * para processamento de imagens usando OpenCV.
+ */
+public final class EcliPixel {
 
-@Data
-public class EcliPixel {
-    //essa classe vai conter os métodos de processamento de imagem em si
-    //funciona como um 'serviço' acessível de outros lugares do código
-    private Path outPath;
-    private final Mat imagemPura;
+    // Construtor privado para impedir que a classe seja instanciada.
+    private EcliPixel() {}
 
-    public EcliPixel(String input, String output, Boolean resource){
-        this.imagemPura= resource ? lerImagemDeRecurso(input) : lerImagem(input);
-        this.outPath= Paths.get(output);
-    }
-    public EcliPixel(Mat imagemPura, String output){
-        this.imagemPura= imagemPura;
-        this.outPath= Paths.get(output);
-    }
+    // --- MÉTODOS DE PROCESSAMENTO DE IMAGEM ---
 
-    // ler de um recurso do classpath
-    public static Mat lerImagemDeRecurso(String caminhoNoRecurso) {
-        try {
-            URL url = EcliPixel.class.getClassLoader().getResource(caminhoNoRecurso);
-            if (url == null) {
-                throw new FalhaAoCarregarImagem("Recurso não encontrado no classpath: " + caminhoNoRecurso);
-            }
-            Path pathDoRecurso = Paths.get(url.toURI());
-            Mat imagem = imread(pathDoRecurso.toString());
-            if (imagem.empty()) {
-                throw new FalhaAoCarregarImagem("Falha ao carregar a imagem do recurso: " + pathDoRecurso);
-            } else {
-                System.out.println("Imagem lida: " + pathDoRecurso.getFileName());
-                return imagem;
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao processar o caminho do recurso", e);
-        }
-    }
-
-    public static Mat lerImagem(String path){
-        Mat imagem = imread(path, IMREAD_COLOR);
-        if (imagem.empty()){
-            throw new FalhaAoCarregarImagem("falha ao carregar a imagem contida em:\n" + path);
-        }
-        else {
-            System.out.println("Imagem: " + imagem.cols() + imagem.rows());
-            return imagem;
-        }
-    }
-
-    public void salvarImagem(String nomeDoArquivo, Mat imagemParaSalvar) {
-        if (this.outPath == null) {
-            throw new IllegalStateException("O caminho de saída (outPath) não foi definido.");
-        }
-        try {
-            Files.createDirectories(this.outPath); // Cria a pasta 'output' se não existir
-            Path caminhoFinal = this.outPath.resolve(nomeDoArquivo);
-            imwrite(caminhoFinal.toString(), imagemParaSalvar);
-            System.out.println("Imagem salva em: " + caminhoFinal.toAbsolutePath());
-        } catch (IOException e) {
-            throw new RuntimeException("Falha ao criar diretórios para o caminho de saída.", e);
-        }
-    }
-
-    public Mat aplicarGaussian(Integer kernelSize){
-        Mat imagem = this.getImagemPura();
-        Size kernel = new Size(kernelSize, kernelSize);
-        if (imagem.empty() || kernelSize % 2 == 0 ){
-            String message = imagem.empty() ? "a imagem carregada pode não existir" : "o kernel precisa ter tamanho ímpar!";
-            throw new FalhaAoCarregarImagem(message);
+    public static Mat aplicarGaussian(Mat imagemEntrada, int kernelSize) {
+        if (imagemEntrada.empty() || kernelSize <= 0 || kernelSize % 2 == 0) {
+            throw new IllegalArgumentException("Imagem de entrada não pode ser vazia e o kernel deve ser um inteiro ímpar positivo.");
         }
         Mat imagemDesfocada = new Mat();
-        GaussianBlur(imagem, imagemDesfocada, kernel, 0);
+        GaussianBlur(imagemEntrada, imagemDesfocada, new Size(kernelSize, kernelSize), 0);
         return imagemDesfocada;
     }
 
-    public Mat converterCanalCores(Mat imagemOrig, CanalCor canal){
-        Mat imagemConvertida= new Mat();
-        if (imagemOrig == null || imagemOrig.empty()) {
-            System.err.println("A imagem de entrada está vazia.");
-            return null;
+    public static Mat converterCanalCores(Mat imagemEntrada, CanalCor canal) {
+        if (imagemEntrada == null || imagemEntrada.empty()) {
+            throw new IllegalArgumentException("A imagem de entrada não pode ser nula ou vazia.");
         }
-        int escolha= switch (canal){
+        Mat imagemConvertida = new Mat();
+        int escolha = switch (canal) {
             case HSV -> COLOR_BGR2HSV;
             case RGB -> COLOR_BGR2RGB;
             case GRAYSCALE -> COLOR_BGR2GRAY;
             case REVERSE -> COLOR_GRAY2BGR;
         };
-        cvtColor(imagemOrig, imagemConvertida, escolha);
+        cvtColor(imagemEntrada, imagemConvertida, escolha);
         return imagemConvertida;
     }
 
-    public Mat binarizar(Thresh metodo, Object... binparams){
-        double valorMax= 255;
-        Mat imagemBinaria= new Mat();
-        Mat imagemCinza = new Mat();
-        Mat imagem = this.getImagemPura();
-        cvtColor(imagem, imagemCinza, COLOR_BGR2GRAY);
+    public static Mat binarizar(Mat imagemEntrada, Thresh metodo, Object... binparams) {
+        if (imagemEntrada.empty()) {
+            throw new IllegalArgumentException("A imagem de entrada para binarizar não pode ser vazia.");
+        }
+        Mat imagemBinaria = new Mat();
+        Mat imagemCinza = (imagemEntrada.channels() == 3) ? converterCanalCores(imagemEntrada, CanalCor.GRAYSCALE) : imagemEntrada;
 
-        switch (metodo){
-            case OTSU:
-                threshold(imagemCinza, imagemBinaria, 0, valorMax, THRESH_OTSU);
-                break;
-            case GLOBAL:
-            case GLOBAL_INV:
-                if (binparams.length < 1){
-                    throw new IllegalArgumentException("Binarização SIMPLES requer 1 parâmetro: limiar (double).");
-                }
+        switch (metodo) {
+            case OTSU -> threshold(imagemCinza, imagemBinaria, 0, 255, THRESH_BINARY | THRESH_OTSU);
+            case GLOBAL, GLOBAL_INV -> {
+                if (binparams.length < 1) throw new IllegalArgumentException("Binarização GLOBAL requer 1 parâmetro: limiar (double).");
                 double limiar = (double) binparams[0];
-                int tipoThresholdSimples = (metodo == GLOBAL) ? THRESH_BINARY : THRESH_BINARY_INV;
-                threshold(imagemCinza, imagemBinaria, limiar, valorMax, tipoThresholdSimples);
-                break;
-            case LOCAL_MEDIA:
-            case LOCAL_GAUSSIANA:
-
+                int tipo = (metodo == GLOBAL) ? THRESH_BINARY : THRESH_BINARY_INV;
+                threshold(imagemCinza, imagemBinaria, limiar, 255, tipo);
+            }
+            case LOCAL_MEDIA, LOCAL_GAUSSIANA -> {
                 if (binparams.length < 2) throw new IllegalArgumentException("Binarização ADAPTATIVA requer 2 parâmetros: tamanhoBloco (int) e constanteC (double).");
                 int tamanhoBloco = (int) binparams[0];
                 double constanteC = (double) binparams[1];
-                int metodoAdaptativo = (metodo == LOCAL_MEDIA) ? ADAPTIVE_THRESH_MEAN_C : ADAPTIVE_THRESH_GAUSSIAN_C;
-
-                adaptiveThreshold(imagemCinza, imagemBinaria, valorMax, metodoAdaptativo, THRESH_BINARY, tamanhoBloco, constanteC);
-                break;
-            default:
-                throw new UnsupportedOperationException("Tipo de binarização não implementado: " + metodo);
+                int tipo = (metodo == LOCAL_MEDIA) ? ADAPTIVE_THRESH_MEAN_C : ADAPTIVE_THRESH_GAUSSIAN_C;
+                adaptiveThreshold(imagemCinza, imagemBinaria, 255, tipo, THRESH_BINARY, tamanhoBloco, constanteC);
+            }
+            default -> throw new UnsupportedOperationException("Tipo de binarização não implementado: " + metodo);
         }
-        return  imagemBinaria;
+        return imagemBinaria;
     }
-    public Mat isolarCanal(CanalCor canal, int canalEscolhido) {
-        Mat imagemOriginal = this.getImagemPura();
-        if (imagemOriginal == null || imagemOriginal.empty()) {
-            throw new IllegalStateException("A imagem de origem não pode ser nula ou vazia.");
-        }
-        if (canal == CanalCor.REVERSE || canal == CanalCor.GRAYSCALE) {
-            throw new IllegalArgumentException("REVERSE ou GRAYSCALE não é um espaço de cor válido para isolar canais.");
+
+    public static Mat isolarCanal(Mat imagemEntrada, int canalEscolhido) {
+        if (imagemEntrada.empty() || imagemEntrada.channels() < 3) {
+            throw new IllegalArgumentException("A imagem de entrada deve ser colorida (3 canais) para isolar um canal.");
         }
         if (canalEscolhido < 1 || canalEscolhido > 3) {
-            throw new IllegalArgumentException("O canal escolhido deve estar entre 1 e 3 para imagens coloridas.");
+            throw new IllegalArgumentException("O canal escolhido deve ser 1, 2 ou 3.");
         }
-        // --- Lógica de Separação de Canais ---
-        // 1. Cria um "vetor" (lista) para armazenar os canais separados
         MatVector canais = new MatVector();
-        // 2. A função split() faz a mágica: separa a imagem em seus canais individuais
-        split(imagemOriginal, canais);
-        int indice = canalEscolhido - 1;
-        Mat canalIsolado = canais.get(indice);
-        return canalIsolado;
+        split(imagemEntrada, canais);
+        // Retorna uma cópia para evitar problemas de referência com o MatVector
+        return new Mat(canais.get(canalEscolhido - 1));
+    }
+
+    public static Mat calcularHistograma(Mat imagemEntrada) {
+        if (imagemEntrada.empty()) {
+            throw new IllegalArgumentException("A imagem de entrada para o histograma não pode ser vazia.");
+        }
+        Mat imagemCinza = (imagemEntrada.channels() == 3) ? converterCanalCores(imagemEntrada, CanalCor.GRAYSCALE) : imagemEntrada;
+
+        MatVector listaDeImagens = new MatVector(imagemCinza);
+        Mat histograma = new Mat();
+        Mat mascara = new Mat();
+        IntPointer canais = new IntPointer(0);
+        IntPointer tamanhoHist = new IntPointer(256);
+        FloatPointer faixas = new FloatPointer(0f, 256f);
+
+        calcHist(listaDeImagens, canais, mascara, histograma, tamanhoHist, faixas, true);
+        return histograma;
+    }
+
+    public static Mat binarizarParalelo(Mat imagemEntrada, Thresh metodo, Object... binparams) {
+        Mat imagemCinza = (imagemEntrada.channels() == 3) ? converterCanalCores(imagemEntrada, CanalCor.GRAYSCALE) : imagemEntrada;
+        Mat imagemBinarizada = new Mat(imagemCinza.size(), imagemCinza.type());
+
+        int numThreads = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        int alturaTotal = imagemCinza.rows();
+        int alturaFatia = alturaTotal / numThreads;
+
+        for (int i = 0; i < numThreads; i++) {
+            int yInicial = i * alturaFatia;
+            int alturaAtual = (i == numThreads - 1) ? (alturaTotal - yInicial) : alturaFatia;
+
+            Rect regiao = new Rect(0, yInicial, imagemCinza.cols(), alturaAtual);
+            Mat fatiaEntrada = new Mat(imagemCinza, regiao);
+            Mat fatiaSaida = new Mat(imagemBinarizada, regiao);
+
+            Runnable tarefa = () -> {
+                Mat resultadoFatia = binarizar(fatiaEntrada, metodo, binparams);
+                resultadoFatia.copyTo(fatiaSaida);
+            };
+            executor.submit(tarefa);
+        }
+
+        executor.shutdown();
+        try {
+            executor.awaitTermination(5, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return imagemBinarizada;
     }
 }
