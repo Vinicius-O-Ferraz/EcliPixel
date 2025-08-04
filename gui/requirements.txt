@@ -1,7 +1,5 @@
-streamlit 
+streamlit
 numpy
 opencv-python
 Pillow
-cv2
-
 
