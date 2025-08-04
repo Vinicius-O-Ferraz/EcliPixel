@@ -1,6 +1,6 @@
-import os
-import streamlit as st
-import numpy as np
-import cv2
-import io
-from PIL import Image
+streamlit 
+numpy
+opencv-python
+Pillow
+io
+os
